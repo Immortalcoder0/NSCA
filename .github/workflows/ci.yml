@@ -1,19 +1,18 @@
 # NSCA CI pipeline — 00-master-plan.md §7, TECH-STACK.md §16.
 #
 # Backend Track B owns this pipeline's definition (backend-02 §5 M5); each
-# track is responsible for its own code passing it. Placed at
-# nsca/.github/workflows/ci.yml because this checkout treats `nsca/` as the
-# repository root (00-master-plan.md's repo diagram shows `.github/workflows/`
-# directly under `nsca/`, alongside `engine/`, `platform/`, `frontend/`,
-# `knowledge/`) — there is no repository above `nsca/` in this checkout, and
-# no `.git` at all yet (a fresh `git init` at `nsca/` would need to happen
-# before this workflow could actually run on GitHub Actions; it has been
-# validated by running every command below manually instead — see the M5
-# report for exact commands and pass/fail counts).
+# track is responsible for its own code passing it. The repository root IS the
+# `nsca/` directory (00-master-plan.md's repo diagram shows `.github/workflows/`
+# directly under it, alongside `engine/`, `platform/`, `frontend/`,
+# `knowledge/`), so every path below is repo-relative — `engine/`, `platform/`,
+# `frontend/`, never `nsca/engine/` or similar. (Earlier revisions of this file
+# prefixed every path with `nsca/`, which only made sense if the repository root
+# were `nsca/`'s parent; that would have failed on a checkout rooted here, and
+# is corrected now that a `git init` at the repository root actually exists.)
 #
 # Two jobs minimum per the M5 task brief: engine tests, platform tests (with
 # a real Postgres service container). A third, best-effort frontend job is
-# included since `nsca/frontend/` exists in this checkout with a real
+# included since `frontend/` exists in this checkout with a real
 # `package.json`/`vitest` suite — if a future checkout doesn't have a
 # frontend yet, this job's `if: hashFiles(...)` guard makes it a no-op
 # rather than a hard failure.
@@ -24,10 +23,6 @@ on:
   push:
     branches: [main]
   pull_request:
-
-defaults:
-  run:
-    working-directory: nsca
 
 jobs:
   # ---------------------------------------------------------------------
@@ -44,15 +39,15 @@ jobs:
           python-version: "3.12"
 
       - name: Install engine (with dev extras)
-        working-directory: nsca/engine
+        working-directory: engine
         run: pip install -e ".[dev]"
 
       - name: ruff (lint)
-        working-directory: nsca/engine
+        working-directory: engine
         run: ruff check nsca_engine
 
       - name: mypy --strict
-        working-directory: nsca/engine
+        working-directory: engine
         run: mypy nsca_engine
 
       # gate_g1_determinism, gate_g4_independence, gate_import_boundary and
@@ -63,7 +58,7 @@ jobs:
       # below, not a separate step; PYTHONHASHSEED=0 matches the
       # determinism-hardening convention used throughout M5's manual runs.
       - name: pytest (full suite, incl. the four gate modules)
-        working-directory: nsca/engine
+        working-directory: engine
         env:
           PYTHONHASHSEED: "0"
         run: pytest -m "" -q
@@ -73,7 +68,7 @@ jobs:
       # — run explicitly, best-effort, so a slow CI runner doesn't flake the
       # required-green job above; not treated as a blocking gate here.
       - name: pytest -m perf (best-effort, non-blocking)
-        working-directory: nsca/engine
+        working-directory: engine
         continue-on-error: true
         run: pytest -m perf -q
 
@@ -111,11 +106,11 @@ jobs:
       # order matters") — engine installs first, unconditionally, before
       # platform/'s own dev extras.
       - name: Install engine
-        working-directory: nsca/engine
+        working-directory: engine
         run: pip install -e .
 
       - name: Install platform (with dev extras)
-        working-directory: nsca/platform
+        working-directory: platform
         run: pip install -e ".[dev]"
 
       # Both ruff and mypy are scoped to services/+learning/ (plus
@@ -133,27 +128,27 @@ jobs:
       # up. Widening this gate to the whole tree is a real, flagged
       # follow-up, not silently done here or silently left uncommented.
       - name: ruff (lint — services/, learning/, remediation/, audit/, and this milestone's other touched files)
-        working-directory: nsca/platform
+        working-directory: platform
         run: ruff check nsca_platform/services nsca_platform/learning nsca_platform/remediation nsca_platform/audit nsca_platform/knowledge_base_loader.py nsca_platform/main.py nsca_platform/api/admin.py
 
       - name: mypy --strict (services/ + learning/)
-        working-directory: nsca/platform
+        working-directory: platform
         run: mypy
 
       - name: pytest (real Postgres)
-        working-directory: nsca/platform
+        working-directory: platform
         env:
           PYTHONHASHSEED: "0"
         run: pytest -q
 
   # ---------------------------------------------------------------------
-  # Frontend — nsca/frontend/ (best-effort: no-op if it doesn't exist in a
+  # Frontend — frontend/ (best-effort: no-op if it doesn't exist in a
   # given checkout; real and required if it does, since it does here)
   # ---------------------------------------------------------------------
   frontend-checks:
     name: Frontend lint/typecheck/test
     runs-on: ubuntu-latest
-    if: ${{ hashFiles('nsca/frontend/package.json') != '' }}
+    if: ${{ hashFiles('frontend/package.json') != '' }}
     steps:
       - uses: actions/checkout@v4
 
@@ -161,10 +156,10 @@ jobs:
         with:
           node-version: "20"
           cache: npm
-          cache-dependency-path: nsca/frontend/package-lock.json
+          cache-dependency-path: frontend/package-lock.json
 
       - name: npm ci
-        working-directory: nsca/frontend
+        working-directory: frontend
         run: npm ci
 
       # No eslint config exists in this checkout yet (00-master-plan.md §7's
@@ -175,12 +170,12 @@ jobs:
       # non-blocking specifically so adding a real eslint config later
       # makes it start enforcing with zero workflow changes.
       - name: eslint (best-effort — no config present in this checkout yet)
-        working-directory: nsca/frontend
+        working-directory: frontend
         run: |
           if [ -f .eslintrc.cjs ] || [ -f .eslintrc.json ] || [ -f eslint.config.js ] || [ -f eslint.config.mjs ]; then
             npx eslint .
           else
-            echo "No ESLint config found under nsca/frontend/ — skipping (see workflow comment)."
+            echo "No ESLint config found under frontend/ — skipping (see workflow comment)."
           fi
 
       # `tsc -b` is the project's own `build` script's typecheck stage
@@ -188,11 +183,11 @@ jobs:
       # so a broken build fails this job without needing a full Vite
       # production build.
       - name: tsc --noEmit (typecheck)
-        working-directory: nsca/frontend
+        working-directory: frontend
         run: npx tsc -b --noEmit
 
       - name: vitest (component tests)
-        working-directory: nsca/frontend
+        working-directory: frontend
         run: npm test
 
       # axe a11y check on changed routes (00-master-plan.md §7) is not
