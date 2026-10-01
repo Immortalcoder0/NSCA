@@ -1,0 +1,59 @@
+domain: crypto
+description: >
+  Cryptographic posture (05-security-baseline-model.md §4.4). Algorithm
+  lists must be canonicalised so comparison against an allow/deny set does
+  not require per-platform logic — canonicalisation itself is TRD-03.3
+  §3.3/registry-owned, layered on top of these fact definitions.
+schema_version: "0.1.0"
+fact_definitions:
+  - path: crypto.ssh.kex_algorithms
+    type: "list<algorithm>"
+    category: crypto_posture
+    description: "Configured SSH key-exchange algorithms, canonical identifiers."
+    status: ratified
+
+  - path: crypto.ssh.ciphers
+    type: "list<algorithm>"
+    category: crypto_posture
+    description: "Configured SSH ciphers, canonical identifiers."
+    status: ratified
+
+  - path: crypto.ssh.macs
+    type: "list<algorithm>"
+    category: crypto_posture
+    description: "Configured SSH MAC algorithms, canonical identifiers."
+    status: ratified
+
+  - path: crypto.tls.versions
+    type: enum
+    category: crypto_posture
+    description: "Enabled TLS protocol versions."
+    closed: true
+    values: ["ssl3", "tls1.0", "tls1.1", "tls1.2", "tls1.3"]
+    status: ratified
+
+  - path: crypto.tls.ciphers
+    type: "list<algorithm>"
+    category: crypto_posture
+    description: "Configured TLS ciphers, canonical identifiers."
+    status: ratified
+
+  - path: crypto.certificates
+    type: "list<object>"
+    category: crypto_posture
+    description: "{subject, issuer, key_bits, signature_algorithm, not_after, self_signed}."
+    status: ratified
+
+  - path: crypto.weak_algorithms_present
+    type: "list<algorithm>"
+    category: crypto_posture
+    description: >
+      Derived — intersection of configured algorithms with a maintained
+      weak-algorithm list.
+    status: ratified
+
+  - path: crypto.fips_mode
+    type: boolean
+    category: crypto_posture
+    description: "Whether FIPS mode is enabled."
+    status: ratified

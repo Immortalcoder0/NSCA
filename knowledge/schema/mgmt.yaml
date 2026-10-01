@@ -1,0 +1,87 @@
+domain: mgmt
+description: >
+  Management-plane access (05-security-baseline-model.md §4.2). The
+  largest and most universally applicable domain — where breaches begin.
+schema_version: "0.1.0"
+fact_definitions:
+  - path: mgmt.protocols.telnet.enabled
+    type: boolean
+    category: management_plane
+    description: "Whether Telnet is accepted for management access."
+    properties: { listens: true, authenticates: true, mutates: true, transports: true, default_on: true }
+    status: ratified
+
+  - path: mgmt.protocols.ssh.enabled
+    type: boolean
+    category: management_plane
+    description: "Whether SSH is accepted for management access."
+    properties: { listens: true, authenticates: true, mutates: true, transports: true, default_on: false }
+    status: ratified
+
+  - path: mgmt.protocols.http.enabled
+    type: boolean
+    category: management_plane
+    description: "Whether the unencrypted HTTP management interface is enabled."
+    properties: { listens: true, authenticates: true, mutates: true, transports: true }
+    status: ratified
+
+  - path: mgmt.protocols.https.enabled
+    type: boolean
+    category: management_plane
+    description: "Whether the HTTPS management interface is enabled."
+    properties: { listens: true, authenticates: true, mutates: true, transports: true }
+    status: ratified
+
+  - path: mgmt.protocols.https.redirect_enforced
+    type: boolean
+    category: management_plane
+    description: >
+      Whether HTTP admin access is redirected to HTTPS rather than served in
+      the clear (e.g. FortiOS `admin-https-redirect`). Distinct from
+      `mgmt.protocols.https.enabled` — a platform can support this setting
+      without it implying anything about whether the HTTPS listener itself
+      is enabled, so extractors must never conflate the two.
+    properties: { listens: false, authenticates: false, mutates: true, transports: false }
+    status: ratified
+
+  - path: mgmt.ssh.version
+    type: integer
+    category: management_plane
+    description: "SSH protocol version in use (1 or 2)."
+    status: ratified
+
+  - path: mgmt.ssh.max_auth_tries
+    type: integer
+    category: management_plane
+    description: "Maximum SSH authentication attempts before disconnect."
+    status: ratified
+
+  - path: mgmt.session.idle_timeout_sec
+    type: integer
+    category: management_plane
+    description: "Idle session timeout. Always seconds — platforms express minutes, seconds, or both."
+    status: ratified
+
+  - path: mgmt.session.absolute_timeout_sec
+    type: integer
+    category: management_plane
+    description: "Absolute (non-idle) session timeout, in seconds."
+    status: ratified
+
+  - path: mgmt.source_restriction.configured
+    type: boolean
+    category: management_plane
+    description: "Whether management access is restricted by source address at all."
+    status: ratified
+
+  - path: mgmt.source_restriction.permits_any
+    type: boolean
+    category: management_plane
+    description: "Derived — whether the source restriction, if any, still permits any source."
+    status: ratified
+
+  - path: mgmt.banner.login_present
+    type: boolean
+    category: management_plane
+    description: "Whether a login banner is configured."
+    status: ratified

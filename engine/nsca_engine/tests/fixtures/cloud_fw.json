@@ -1,0 +1,22 @@
+{
+  "hostname": "cloud-fw-01",
+  "management": {
+    "ssh_enabled": true,
+    "https_enabled": true
+  },
+  "logging": {
+    "remote_enabled": true
+  },
+  "rules": [
+    {
+      "name": "allow-ssh",
+      "action": "allow",
+      "port": 22
+    },
+    {
+      "name": "deny-all",
+      "action": "deny",
+      "port": 0
+    }
+  ]
+}

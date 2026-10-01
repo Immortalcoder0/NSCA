@@ -1,0 +1,62 @@
+domain: auth
+description: >
+  Identity, authentication and authorisation (05-security-baseline-model.md
+  §4.3).
+schema_version: "0.1.0"
+fact_definitions:
+  - path: auth.local_users
+    type: "list<object>"
+    category: identity_auth
+    description: "Local accounts: {name, privilege_level, storage_type, reversible, has_password, ssh_key_present}."
+    properties: { authenticates: true, persists: true }
+    status: ratified
+
+  - path: auth.default_credentials_present
+    type: boolean
+    category: identity_auth
+    description: "Derived — whether a known-default username or community exists."
+    status: ratified
+
+  - path: auth.central.configured
+    type: boolean
+    category: identity_auth
+    description: "Whether centralised AAA (RADIUS/TACACS+/LDAP/Kerberos) is configured."
+    properties: { authenticates: true, transports: true }
+    status: ratified
+
+  - path: auth.central.local_fallback
+    type: boolean
+    category: identity_auth
+    description: "Whether a local account remains usable if the central server is unreachable."
+    status: ratified
+
+  - path: auth.central.accounting_enabled
+    type: boolean
+    category: identity_auth
+    description: "Whether AAA command accounting is enabled."
+    status: ratified
+
+  - path: auth.password_policy.min_length
+    type: integer
+    category: identity_auth
+    description: "Minimum required local password length."
+    status: ratified
+
+  - path: auth.password_policy.complexity_required
+    type: boolean
+    category: identity_auth
+    description: "Whether password complexity rules are enforced."
+    status: ratified
+
+  - path: auth.password_policy.lockout_threshold
+    type: integer
+    category: identity_auth
+    description: "Number of failed attempts before lockout."
+    status: ratified
+
+  - path: auth.mfa.enabled
+    type: boolean
+    category: identity_auth
+    description: "Whether multi-factor authentication is enabled for administrative access."
+    properties: { authenticates: true }
+    status: ratified

@@ -1,0 +1,102 @@
+# NSCA — Docker Compose, three profiles (00-master-plan.md §3, TECH-STACK.md §15).
+#
+#   standard    : web + worker + db + inference   (docker compose --profile standard up)
+#   air-gapped  : web + worker + db                (docker compose --profile air-gapped up)
+#   workstation : app (web+worker combined) + db    (docker compose --profile workstation up)
+#
+# Judgment call (flag per M0 task instructions): TECH-STACK.md §15 lists
+# "workstation: all-in-one" as a single-row table cell without specifying
+# container boundaries. NFR-DEP-004 / TECH-STACK.md §5 "On single-node
+# deployment" is explicit that Postgres must still run as Postgres (no
+# SQLite dual-backend) even on the workstation profile, so "all-in-one" is
+# read here as "web API and worker collapsed into one container," not
+# "database collapsed into the app process." If Backend Track B intended
+# something narrower (e.g. truly one container including Postgres via
+# `postgres` running as a subprocess), that's a correction to make in a
+# later milestone, not assumed here.
+#
+# Deliberately absent, per TECH-STACK.md §15: Kubernetes, Redis, MinIO, a
+# message broker, a separate search cluster, a service mesh.
+
+services:
+  db:
+    image: postgres:16
+    profiles: ["standard", "air-gapped", "workstation"]
+    environment:
+      POSTGRES_USER: nsca
+      POSTGRES_PASSWORD: nsca
+      POSTGRES_DB: nsca
+    volumes:
+      - nsca_pgdata:/var/lib/postgresql/data
+    ports:
+      - "5432:5432"
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U nsca"]
+      interval: 5s
+      timeout: 5s
+      retries: 10
+
+  web:
+    build:
+      context: ./platform
+    profiles: ["standard", "air-gapped"]
+    command: ["python", "-m", "uvicorn", "nsca_platform.main:app", "--host", "0.0.0.0", "--port", "8000"]
+    environment:
+      DATABASE_URL: postgresql+psycopg://nsca:nsca@db:5432/nsca
+    ports:
+      - "8000:8000"
+    depends_on:
+      db:
+        condition: service_healthy
+    volumes:
+      - nsca_artifacts:/app/artifacts
+
+  worker:
+    build:
+      context: ./platform
+    profiles: ["standard", "air-gapped"]
+    # M0: no worker entrypoint exists yet (jobs/ lands in M1+); this
+    # service intentionally idles so `docker compose up` succeeds without
+    # a real job queue consumer to run.
+    command: ["python", "-c", "import time; print('worker: no jobs/ entrypoint yet (M1+)'); time.sleep(2**31)"]
+    environment:
+      DATABASE_URL: postgresql+psycopg://nsca:nsca@db:5432/nsca
+    depends_on:
+      db:
+        condition: service_healthy
+    volumes:
+      - nsca_artifacts:/app/artifacts
+
+  # Optional local-inference container (Ollama + Qwen2.5-7B-Instruct,
+  # TECH-STACK.md §9) — only in the "standard" profile. The learning
+  # subsystem degrades to heuristic-only proposals without it
+  # (INV-08.2-03); assessment/ never touches it.
+  inference:
+    image: ollama/ollama:latest
+    profiles: ["standard"]
+    ports:
+      - "11434:11434"
+    volumes:
+      - nsca_ollama:/root/.ollama
+
+  # Workstation profile: web + worker collapsed into a single container
+  # (see judgment-call note above). Postgres remains its own container.
+  app:
+    build:
+      context: ./platform
+    profiles: ["workstation"]
+    command: ["python", "-m", "uvicorn", "nsca_platform.main:app", "--host", "0.0.0.0", "--port", "8000"]
+    environment:
+      DATABASE_URL: postgresql+psycopg://nsca:nsca@db:5432/nsca
+    ports:
+      - "8000:8000"
+    depends_on:
+      db:
+        condition: service_healthy
+    volumes:
+      - nsca_artifacts:/app/artifacts
+
+volumes:
+  nsca_pgdata:
+  nsca_artifacts:
+  nsca_ollama:

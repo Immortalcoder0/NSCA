@@ -1,0 +1,500 @@
+# NSCA native control pack (06-controls-and-frameworks.md §3) — M1 scope.
+#
+# 22 controls, chosen to (a) reproduce 05-security-baseline-model.md §9's
+# worked example exactly (controls referencing mgmt.source_restriction.*,
+# crypto.ssh.ciphers) and (b) exercise all four verdicts (PASS/FAIL/UNKNOWN/
+# NOT_APPLICABLE) against the Cisco IOS M1 fact set — see the M1 report for
+# the verdict tally and the reasoning behind each control's design.
+#
+# Primary family: management_plane (the doc's own §3 worked example,
+# NSCA-MGMT-002, lives here) with a handful of authentication/cryptography/
+# logging_audit/snmp/time_sync controls added for verdict diversity — a
+# judgment call flagged in the M1 report rather than silently made.
+control_pack_id: nsca_native
+version: "0.1.0"
+
+lookup_tables:
+  ALLOWED_CIPHERS:
+    - "aes256-ctr"
+    - "aes256-gcm"
+    - "chacha20-poly1305"
+
+controls:
+  - control_id: NSCA-MGMT-001
+    title: SSH must be enabled for management access
+    family: management_plane
+    severity_base: high
+    applies_to: { platform_family: "*" }
+    requires_facts: [mgmt.protocols.ssh.enabled]
+    assert: "mgmt.protocols.ssh.enabled == true"
+    maps_to:
+      nist: [{ id: AC-17 }]
+
+  - control_id: NSCA-MGMT-002
+    title: Plaintext management protocols must be disabled
+    family: management_plane
+    severity_base: high
+    applies_to: { platform_family: "*" }
+    requires_facts: [mgmt.protocols.telnet.enabled, mgmt.protocols.http.enabled]
+    assert: >
+      mgmt.protocols.telnet.enabled == false and
+      mgmt.protocols.http.enabled == false
+    vacuity:
+      meaningful_when: "mgmt.protocols.ssh.enabled == true"
+    maps_to:
+      cis: [{ id: CIS-IOS-1.2.4 }]
+      nist: [{ id: AC-17 }, { id: SC-8 }]
+    # M4 addition (backend-02 §4.4 / TRD-07.1 §3.2): remediation is content
+    # read by `remediation/planner.py` directly from this YAML file (its own
+    # small reader, never Track A's `controls.rulepack_loader`) — the loader
+    # itself ignores unknown top-level keys on a control entry (verified:
+    # `load_control_pack` only ever does `c.get(...)` for the fields it
+    # knows about), so this block is invisible to and harmless for Track A's
+    # real control evaluation. Two platform bands to prove version-specific
+    # selection (TRD-07.1 §3.2's own worked example): `cisco_ios` (legacy
+    # IOS CLI) and `cisco_iosxe` (adds `ip http secure-server`, matching the
+    # 10-reporting.md §2 CORE-SW-01 worked example verbatim). A third
+    # platform (`cisco_nxos`) is deliberately left unauthored so
+    # V-07.1-001's refusal case has something real to refuse against.
+    remediation:
+      cisco_ios:
+        version_range: ">=12.0,<15.0"
+        steps:
+          - id: 1
+            cmd: "line vty 0 4"
+            impact: safe
+            reason: "enter VTY line configuration context"
+          - id: 2
+            cmd: "transport input ssh"
+            impact: lockout_risk
+            depends_on: [1]
+            reason: "disable plaintext Telnet transport on the VTY lines"
+            rollback: "transport input telnet ssh"
+            fact_effects:
+              - path: mgmt.protocols.telnet.enabled
+                value: false
+          - id: 3
+            cmd: "no ip http server"
+            impact: safe
+            reason: "disable the plaintext HTTP management listener"
+            rollback: "ip http server"
+            fact_effects:
+              - path: mgmt.protocols.http.enabled
+                value: false
+        dry_run_check:
+          expression: "telnet == false and http == false"
+          captures: { telnet: mgmt.protocols.telnet.enabled, http: mgmt.protocols.http.enabled }
+      cisco_iosxe:
+        version_range: ">=15.0"
+        steps:
+          - id: 1
+            cmd: "line vty 0 15"
+            impact: safe
+            reason: "enter VTY line configuration context (IOS-XE range 0-15)"
+          - id: 2
+            cmd: "transport input ssh"
+            impact: lockout_risk
+            depends_on: [1]
+            reason: "disable plaintext Telnet transport on the VTY lines"
+            rollback: "transport input telnet ssh"
+            fact_effects:
+              - path: mgmt.protocols.telnet.enabled
+                value: false
+          - id: 3
+            cmd: "no ip http server"
+            impact: safe
+            reason: "disable the plaintext HTTP management listener"
+            rollback: "ip http server"
+            fact_effects:
+              - path: mgmt.protocols.http.enabled
+                value: false
+          - id: 4
+            cmd: "ip http secure-server"
+            impact: safe
+            reason: "IOS-XE-specific: ensure the HTTPS management listener remains available"
+        dry_run_check:
+          expression: "telnet == false and http == false"
+          captures: { telnet: mgmt.protocols.telnet.enabled, http: mgmt.protocols.http.enabled }
+
+  - control_id: NSCA-MGMT-003
+    title: HTTPS is preferred over HTTP for the web management interface
+    family: management_plane
+    severity_base: medium
+    applies_to: { platform_family: "*" }
+    requires_facts: [mgmt.protocols.http.enabled, mgmt.protocols.https.enabled]
+    assert: "mgmt.protocols.http.enabled == false or mgmt.protocols.https.enabled == true"
+
+  - control_id: NSCA-MGMT-004
+    title: Management session idle timeout must be bounded
+    family: management_plane
+    severity_base: medium
+    applies_to: { platform_family: "*" }
+    requires_facts: [mgmt.session.idle_timeout_sec]
+    assert: "mgmt.session.idle_timeout_sec > 0 and mgmt.session.idle_timeout_sec <= 600"
+
+  - control_id: NSCA-MGMT-005
+    title: Management access must be restricted by source address
+    family: management_plane
+    severity_base: high
+    applies_to: { platform_family: "*" }
+    requires_facts: [mgmt.source_restriction.configured]
+    assert: "mgmt.source_restriction.configured == true"
+    # The lockout-detection demonstration control (TRD-07.1 §3.5): tightening
+    # this is exactly the "tightening a management access list and instantly
+    # losing access" scenario the whole remediation-planner subsystem exists
+    # to prevent. `allowed_sources` is Track B's own fact-effect vocabulary
+    # for `remediation/lockout.py`'s local approximation — it is not read by
+    # Track A's real control evaluation (no control here asserts on it).
+    remediation:
+      cisco_ios:
+        version_range: ">=12.0"
+        steps:
+          - id: 1
+            cmd: "ip access-list standard MGMT_ACCESS"
+            impact: safe
+            reason: "create the management-access standard ACL"
+          - id: 2
+            cmd: "permit 10.0.0.0 0.255.255.255"
+            impact: safe
+            depends_on: [1]
+            reason: "permit the trusted management network (10.0.0.0/8)"
+          - id: 3
+            cmd: "permit 10.20.0.0 0.0.255.255"
+            impact: safe
+            depends_on: [1]
+            reason: "permit the secondary trusted management network (10.20.0.0/16)"
+          - id: 4
+            cmd: "line vty 0 4"
+            impact: safe
+            depends_on: [2, 3]
+          - id: 5
+            cmd: "access-class MGMT_ACCESS in"
+            impact: lockout_risk
+            depends_on: [4]
+            reason: "apply the management ACL to VTY access — DD-07.1-01: management-ACL steps are lockout_risk by default"
+            rollback: "no access-class MGMT_ACCESS in"
+            fact_effects:
+              - path: mgmt.source_restriction.configured
+                value: true
+              - path: mgmt.source_restriction.allowed_sources
+                value: ["10.0.0.0/8", "10.20.0.0/16"]
+        dry_run_check:
+          expression: "configured == true"
+          captures: { configured: mgmt.source_restriction.configured }
+      cisco_iosxe:
+        version_range: ">=15.0"
+        steps:
+          - id: 1
+            cmd: "ip access-list standard MGMT_ACCESS"
+            impact: safe
+            reason: "create the management-access standard ACL"
+          - id: 2
+            cmd: "permit 10.0.0.0 0.255.255.255"
+            impact: safe
+            depends_on: [1]
+            reason: "permit the trusted management network (10.0.0.0/8)"
+          - id: 3
+            cmd: "permit 10.20.0.0 0.0.255.255"
+            impact: safe
+            depends_on: [1]
+            reason: "permit the secondary trusted management network (10.20.0.0/16)"
+          - id: 4
+            cmd: "line vty 0 15"
+            impact: safe
+            depends_on: [2, 3]
+          - id: 5
+            cmd: "access-class MGMT_ACCESS in"
+            impact: lockout_risk
+            depends_on: [4]
+            reason: "apply the management ACL to VTY access — DD-07.1-01: management-ACL steps are lockout_risk by default"
+            rollback: "no access-class MGMT_ACCESS in"
+            fact_effects:
+              - path: mgmt.source_restriction.configured
+                value: true
+              - path: mgmt.source_restriction.allowed_sources
+                value: ["10.0.0.0/8", "10.20.0.0/16"]
+        dry_run_check:
+          expression: "configured == true"
+          captures: { configured: mgmt.source_restriction.configured }
+
+  - control_id: NSCA-MGMT-006
+    title: A login banner must be configured
+    family: management_plane
+    severity_base: low
+    applies_to: { platform_family: "*" }
+    requires_facts: [mgmt.banner.login_present]
+    assert: "mgmt.banner.login_present == true"
+
+  - control_id: NSCA-MGMT-007
+    title: SSH protocol version 2 must be required
+    family: management_plane
+    severity_base: high
+    applies_to: { platform_family: "*" }
+    requires_facts: [mgmt.ssh.version]
+    assert: "mgmt.ssh.version == 2"
+
+  - control_id: NSCA-MGMT-008
+    title: SSH authentication attempts must be bounded
+    family: management_plane
+    severity_base: medium
+    applies_to: { platform_family: "*" }
+    requires_facts: [mgmt.ssh.max_auth_tries]
+    assert: "mgmt.ssh.max_auth_tries <= 5"
+
+  - control_id: NSCA-MGMT-009
+    title: Centralised AAA local fallback must be disabled when central auth is configured
+    family: authentication
+    severity_base: medium
+    applies_to: { platform_family: "*" }
+    requires_facts: [auth.central.local_fallback]
+    assert: "auth.central.local_fallback == false"
+
+  - control_id: NSCA-MGMT-010
+    title: PAN-OS management profile restricts permitted services
+    family: management_plane
+    severity_base: medium
+    applies_to: { platform_family: [panos] }
+    requires_facts: []
+    assert: "true == true"
+
+  - control_id: NSCA-AUTH-001
+    title: No privilege-15 local account may use reversible password storage
+    family: authentication
+    severity_base: critical
+    applies_to: { platform_family: "*" }
+    requires_facts: [auth.local_users]
+    assert: "auth.local_users | none(u => u.privilege_level >= 15 and u.reversible == true)"
+    # TRD-07.1 §3.4 INV-07.1-02's worked example, reproduced: removing the
+    # only reversible-password local account is only safe once central
+    # authentication is configured and verified working — `after_control`
+    # is Track B's own cross-finding-dependency vocabulary (TRD-07.1 §3.4
+    # "Cross-finding dependencies are supported"), read by
+    # `remediation/planner.py`, not Track A. `op: remove_admin` is a small,
+    # named fact-effect operation `remediation/dry_run.py` interprets
+    # (filters `auth.local_users` down to non-admin/non-privilege-15
+    # entries) rather than a generic scripting hook — kept deliberately
+    # narrow, matching G4/NFR-SEC-007's "no code execution in content".
+    remediation:
+      cisco_ios:
+        version_range: ">=12.0"
+        steps:
+          - id: 1
+            cmd: "no username admin password 7 <redacted-prior-value>"
+            impact: service_affecting
+            requires_verified: true
+            after_control: NSCA-AUTH-002
+            reason: "remove the reversible-password local account"
+            checkpoint: "Confirm you can authenticate via TACACS+ in a second session before proceeding. This step removes the only local account with a reversible password; if central authentication is unreachable afterwards, the device becomes unreachable."
+            rollback: "username admin privilege 15 password 7 <redacted-prior-value>"
+            rollback_from_prior_fact: auth.local_users
+            fact_effects:
+              - path: auth.local_users
+                op: remove_admin
+          - id: 2
+            cmd: "username admin privilege 15 algorithm-type scrypt secret <NEW>"
+            impact: safe
+            depends_on: [1]
+            reason: "replace with a non-reversible credential"
+        # NOT a `nsca_engine.api.evaluate_value_expression` check, unlike
+        # this control pack's other `dry_run_check` blocks: value_lang
+        # (TRD-03.1 §3.3, `extract/value_lang.py`) is deliberately minimal —
+        # Compare/BoolOp/Call-to-a-fixed-function-list over scalar captures
+        # only, with no lambda/comprehension/predicate-over-list support. It
+        # cannot express this control's real `assert` semantics
+        # (`auth.local_users | none(u => u.privilege_level >= 15 and
+        # u.reversible == true)`), which belongs to the separate, richer
+        # `controls/expression.py` grammar platform code may not import.
+        # `remediation/dry_run.py` therefore evaluates `local_users_predicate`
+        # checks with a small hand-written Python predicate that mirrors the
+        # real control's intent — an explicitly reduced-fidelity
+        # re-implementation, not a call into Track A's real evaluator (see
+        # that module's docstring and the M4 report's contract-gap section).
+        dry_run_check:
+          kind: local_users_predicate
+          want: no_reversible_privileged
+          captures: { users: auth.local_users }
+      cisco_iosxe:
+        version_range: ">=15.0"
+        steps:
+          - id: 1
+            cmd: "no username admin password 7 <redacted-prior-value>"
+            impact: service_affecting
+            requires_verified: true
+            after_control: NSCA-AUTH-002
+            reason: "remove the reversible-password local account"
+            checkpoint: "Confirm you can authenticate via TACACS+ in a second session before proceeding. This step removes the only local account with a reversible password; if central authentication is unreachable afterwards, the device becomes unreachable."
+            rollback: "username admin privilege 15 password 7 <redacted-prior-value>"
+            rollback_from_prior_fact: auth.local_users
+            fact_effects:
+              - path: auth.local_users
+                op: remove_admin
+          - id: 2
+            cmd: "username admin privilege 15 algorithm-type scrypt secret <NEW>"
+            impact: safe
+            depends_on: [1]
+            reason: "replace with a non-reversible credential"
+        # NOT a `nsca_engine.api.evaluate_value_expression` check, unlike
+        # this control pack's other `dry_run_check` blocks: value_lang
+        # (TRD-03.1 §3.3, `extract/value_lang.py`) is deliberately minimal —
+        # Compare/BoolOp/Call-to-a-fixed-function-list over scalar captures
+        # only, with no lambda/comprehension/predicate-over-list support. It
+        # cannot express this control's real `assert` semantics
+        # (`auth.local_users | none(u => u.privilege_level >= 15 and
+        # u.reversible == true)`), which belongs to the separate, richer
+        # `controls/expression.py` grammar platform code may not import.
+        # `remediation/dry_run.py` therefore evaluates `local_users_predicate`
+        # checks with a small hand-written Python predicate that mirrors the
+        # real control's intent — an explicitly reduced-fidelity
+        # re-implementation, not a call into Track A's real evaluator (see
+        # that module's docstring and the M4 report's contract-gap section).
+        dry_run_check:
+          kind: local_users_predicate
+          want: no_reversible_privileged
+          captures: { users: auth.local_users }
+
+  - control_id: NSCA-AUTH-002
+    title: Centralised authentication (AAA) must be configured
+    family: authentication
+    severity_base: high
+    applies_to: { platform_family: "*" }
+    requires_facts: [auth.central.configured]
+    assert: "auth.central.configured == true"
+    remediation:
+      cisco_ios:
+        version_range: ">=12.0"
+        steps:
+          - id: 1
+            cmd: "aaa new-model"
+            impact: safe
+            reason: "enable the AAA subsystem"
+          - id: 2
+            cmd: "aaa authentication login default group tacacs+ local"
+            impact: safe
+            depends_on: [1]
+            reason: "central authentication with local fallback"
+            rollback: "no aaa new-model"
+            fact_effects:
+              - path: auth.central.configured
+                value: true
+        dry_run_check:
+          expression: "configured == true"
+          captures: { configured: auth.central.configured }
+      cisco_iosxe:
+        version_range: ">=15.0"
+        steps:
+          - id: 1
+            cmd: "aaa new-model"
+            impact: safe
+            reason: "enable the AAA subsystem"
+          - id: 2
+            cmd: "aaa authentication login default group tacacs+ local"
+            impact: safe
+            depends_on: [1]
+            reason: "central authentication with local fallback"
+            rollback: "no aaa new-model"
+            fact_effects:
+              - path: auth.central.configured
+                value: true
+        dry_run_check:
+          expression: "configured == true"
+          captures: { configured: auth.central.configured }
+
+  - control_id: NSCA-AUTH-003
+    title: A local emergency fallback account must exist
+    family: authentication
+    severity_base: medium
+    applies_to: { platform_family: "*" }
+    requires_facts: [auth.local_users]
+    assert: "auth.local_users | any(u => u.privilege_level >= 15)"
+    # Same value_lang limitation as NSCA-AUTH-001 above — see its comment.
+    dry_run_check:
+      kind: local_users_predicate
+      want: has_privileged
+      captures: { users: auth.local_users }
+    # No remediation content: this control exists to demonstrate dry run's
+    # newly-failing detection (TRD-07.1 §3.6, FR-REM-009, V-07.1-006) —
+    # NSCA-AUTH-001's remediation removes the only local account, which
+    # flips this control from PASS to FAIL if it was the sole privilege-15
+    # user. It intentionally shares `auth.local_users` with NSCA-AUTH-001 so
+    # `remediation/dry_run.py`'s cross-control impact scan has a real,
+    # authored example to catch rather than a synthetic test-only fixture.
+
+  - control_id: NSCA-SNMP-001
+    title: No SNMP community may use a default name
+    family: snmp
+    severity_base: critical
+    applies_to: { platform_family: "*" }
+    requires_facts: [snmp.communities]
+    assert: "snmp.communities | none(c => c.is_default == true)"
+
+  - control_id: NSCA-SNMP-002
+    title: Only SNMPv3 may be enabled
+    family: snmp
+    severity_base: high
+    applies_to: { platform_family: "*" }
+    requires_facts: [snmp.versions]
+    assert: "snmp.versions == \"v3\""
+
+  - control_id: NSCA-SNMP-003
+    title: SNMP write access must not be present
+    family: snmp
+    severity_base: high
+    applies_to: { platform_family: "*" }
+    requires_facts: [snmp.write_access_present]
+    assert: "snmp.write_access_present == false"
+
+  - control_id: NSCA-LOG-001
+    title: Remote logging must be configured
+    family: logging_audit
+    severity_base: high
+    applies_to: { platform_family: "*" }
+    requires_facts: [logging.remote_configured]
+    assert: "logging.remote_configured == true"
+
+  - control_id: NSCA-LOG-002
+    title: Log timestamps must be enabled
+    family: logging_audit
+    severity_base: medium
+    applies_to: { platform_family: "*" }
+    requires_facts: [logging.timestamps_enabled]
+    assert: "logging.timestamps_enabled == true"
+
+  - control_id: NSCA-LOG-003
+    title: Administrative command accounting must be logged
+    family: logging_audit
+    severity_base: high
+    applies_to: { platform_family: "*" }
+    requires_facts: [logging.admin_commands_logged]
+    assert: "logging.admin_commands_logged == true"
+
+  - control_id: NSCA-TIME-001
+    title: NTP time synchronisation must be enabled
+    family: time_sync
+    severity_base: medium
+    applies_to: { platform_family: "*" }
+    requires_facts: [time.ntp.enabled]
+    assert: "time.ntp.enabled == true"
+
+  - control_id: NSCA-TIME-002
+    title: NTP authentication must be configured
+    family: time_sync
+    severity_base: low
+    applies_to: { platform_family: "*" }
+    requires_facts: [time.ntp.authentication_configured]
+    assert: "time.ntp.authentication_configured == true"
+
+  - control_id: NSCA-CRYPTO-001
+    title: SSH ciphers must be restricted to the approved allow-list
+    family: cryptography
+    severity_base: critical
+    applies_to: { platform_family: "*" }
+    requires_facts: [crypto.ssh.ciphers]
+    assert: "crypto.ssh.ciphers | all(c => c in ALLOWED_CIPHERS)"
+
+  - control_id: NSCA-CRYPTO-002
+    title: FIPS mode must be enabled
+    family: cryptography
+    severity_base: medium
+    applies_to: { platform_family: "*" }
+    requires_facts: [crypto.fips_mode]
+    assert: "crypto.fips_mode == true"

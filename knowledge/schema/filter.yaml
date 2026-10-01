@@ -1,0 +1,50 @@
+domain: filter
+description: >
+  Access control and traffic policy (05-security-baseline-model.md §4.8).
+  Explicitly named in the problem statement ("configuring granular ACLs").
+  Feeds the configuration graph.
+schema_version: "0.1.0"
+fact_definitions:
+  - path: filter.rulesets
+    type: "list<object>"
+    category: access_control
+    description: "{name, type, rule_count}."
+    status: ratified
+
+  - path: filter.rules
+    type: "list<object>"
+    category: access_control
+    description: "{ruleset, position, action, source, destination, service, protocol, logged, enabled, description}."
+    status: ratified
+
+  - path: filter.objects
+    type: "list<object>"
+    category: access_control
+    description: "{name, type, members[]} — members may reference other objects."
+    status: ratified
+
+  - path: filter.permits_any_any
+    type: "list<ref>"
+    category: access_control
+    description: "Derived — rules permitting all sources to all destinations."
+    status: ratified
+
+  - path: filter.unlogged_deny_present
+    type: boolean
+    category: access_control
+    description: "Derived — whether an unlogged deny rule is present."
+    status: ratified
+
+  - path: filter.shadowed_rules
+    type: "list<ref>"
+    category: access_control
+    description: "Derived — rules unreachable because an earlier rule matches first."
+    status: ratified
+
+  - path: filter.default_action
+    type: enum
+    category: access_control
+    description: "Ruleset default action."
+    closed: true
+    values: ["permit", "deny", "unknown"]
+    status: ratified

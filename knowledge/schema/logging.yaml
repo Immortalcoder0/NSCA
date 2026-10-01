@@ -1,0 +1,57 @@
+domain: logging
+description: >
+  Audit and telemetry (05-security-baseline-model.md §4.5). Explicitly
+  named in the problem statement ("logging all administrative access").
+schema_version: "0.1.0"
+fact_definitions:
+  - path: logging.enabled
+    type: boolean
+    category: audit_telemetry
+    description: "Whether logging is enabled at all."
+    properties: { observable: true }
+    status: ratified
+
+  - path: logging.remote_servers
+    type: "list<object>"
+    category: audit_telemetry
+    description: "{host, protocol, port, transport_encrypted}."
+    properties: { transports: true, observable: true }
+    status: ratified
+
+  - path: logging.remote_configured
+    type: boolean
+    category: audit_telemetry
+    description: "Derived — whether at least one remote log destination is configured."
+    status: ratified
+
+  - path: logging.severity_level
+    type: enum
+    category: audit_telemetry
+    description: "Minimum logged severity, normalised to syslog severities."
+    closed: true
+    values: ["emergency", "alert", "critical", "error", "warning", "notice", "info", "debug"]
+    status: ratified
+
+  - path: logging.admin_commands_logged
+    type: boolean
+    category: audit_telemetry
+    description: "Command accounting — whether administrative commands are logged."
+    status: ratified
+
+  - path: logging.auth_events_logged
+    type: boolean
+    category: audit_telemetry
+    description: "Whether authentication events are logged."
+    status: ratified
+
+  - path: logging.timestamps_enabled
+    type: boolean
+    category: audit_telemetry
+    description: "Whether log entries carry timestamps."
+    status: ratified
+
+  - path: logging.timestamps_include_timezone
+    type: boolean
+    category: audit_telemetry
+    description: "Whether log timestamps include timezone information."
+    status: ratified

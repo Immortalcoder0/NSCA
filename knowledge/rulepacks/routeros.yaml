@@ -1,0 +1,83 @@
+platform: routeros
+vendor: mikrotik
+version: 0.1.0
+trust_tier: local
+fingerprint:
+  signatures:
+  - type: line_regex
+    pattern: ^/ip service$
+    weight: 0.3
+  - type: line_regex
+    pattern: '^/system '
+    weight: 0.2
+  - type: line_regex
+    pattern: '^/interface '
+    weight: 0.2
+  - type: line_regex
+    pattern: ^set \[ find
+    weight: 0.15
+  - type: comment_char
+    value: '#'
+    weight: 0.15
+  - type: negative
+    pattern: '^set system '
+    weight: -0.6
+  - type: negative
+    pattern: \{\s*$
+    weight: -0.6
+  - type: negative
+    pattern: '^config system '
+    weight: -0.6
+  - type: negative
+    pattern: '^line vty '
+    weight: -0.6
+grammar:
+  paradigm: path_header
+  comment_char: '#'
+extractors:
+- extractor_id: routeros.mgmt.http_enabled
+  version: 1
+  scope:
+    kind: any
+  match: '^set www disabled=(?P<val>yes|no)(?: .*)?$'
+  emit:
+  - fact: mgmt.protocols.http.enabled
+    value: val == 'no'
+- extractor_id: routeros.mgmt.ssh_enabled
+  version: 1
+  scope:
+    kind: any
+  match: '^set ssh disabled=(?P<val>yes|no)(?: .*)?$'
+  emit:
+  - fact: mgmt.protocols.ssh.enabled
+    value: val == 'no'
+- extractor_id: routeros.mgmt.telnet_enabled
+  version: 1
+  scope:
+    kind: any
+  match: '^set telnet disabled=(?P<val>yes|no)(?: .*)?$'
+  emit:
+  - fact: mgmt.protocols.telnet.enabled
+    value: val == 'no'
+- extractor_id: routeros.time.ntp_client
+  version: 1
+  scope:
+    kind: any
+  match: ^set enabled=(?P<val>yes|no) primary-ntp=(?P<host>\S+)$
+  emit:
+  - fact: time.ntp.enabled
+    value: val == 'yes'
+- extractor_id: routeros.topology.interface_rename
+  version: 1
+  scope:
+    kind: any
+  match: ^set \[ find default-name=(?P<orig>\S+) \] name=(?P<name>\S+)$
+  collection: topology.interfaces
+  element_fields:
+    name: name
+defaults:
+  mgmt.protocols.telnet.enabled:
+  - version_range: '*'
+    value: true
+    source: "MikroTik RouterOS default configuration — the telnet service ships\
+      \ enabled unless explicitly disabled.\n"

@@ -1,0 +1,48 @@
+domain: topology
+description: >
+  Interfaces, zones, routing (05-security-baseline-model.md §4.9). Primarily
+  consumed by the graph builder and by exposure classification.
+schema_version: "0.1.0"
+fact_definitions:
+  - path: topology.interfaces
+    type: "list<object>"
+    category: topology
+    description: "{name, enabled, type, addresses[], zone, vlan, description, unused}."
+    status: ratified
+
+  - path: topology.zones
+    type: "list<object>"
+    category: topology
+    description: "{name, trust_level, interfaces[]}."
+    status: ratified
+
+  - path: topology.vlans
+    type: "list<object>"
+    category: topology
+    description: "Configured VLANs."
+    status: ratified
+
+  - path: topology.routes
+    type: "list<object>"
+    category: topology
+    description: "{destination, next_hop, interface, protocol, metric}."
+    status: ratified
+
+  - path: topology.default_route_present
+    type: boolean
+    category: topology
+    description: "Whether a default route is present."
+    status: ratified
+
+  - path: topology.routing_protocols
+    type: "list<object>"
+    category: topology
+    description: "{protocol, authenticated, auth_type}."
+    status: ratified
+
+  - path: topology.discovery_protocols
+    type: "list<object>"
+    category: topology
+    description: "{protocol, enabled, interfaces[]} — CDP, LLDP."
+    properties: { observable: false, default_on: true }
+    status: ratified

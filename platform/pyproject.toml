@@ -1,0 +1,114 @@
+[project]
+name = "nsca_platform"
+version = "0.1.0"
+description = "NSCA Backend Track B — Application Services, Learning Subsystem, Reporting, REST API"
+requires-python = ">=3.11"
+readme = "README.md"
+dependencies = [
+    "fastapi>=0.115,<0.116",
+    "uvicorn[standard]>=0.30,<0.31",
+    "sqlalchemy>=2.0,<2.1",
+    "alembic>=1.13,<1.14",
+    "psycopg[binary]>=3.2,<3.3",
+    "pydantic>=2.7,<3.0",
+    "python-multipart>=0.0.9",
+    "pyyaml>=6.0",
+    "nsca_engine>=0.0.1",
+    # M4 (backend-02 §4.6 / TECH-STACK.md §11) — reporting pipeline.
+    "jinja2>=3.1,<4.0",
+    "pikepdf>=9.0",
+    "python-docx>=1.1",
+    "weasyprint>=62.0",
+    # M4 (backend-02 §4.5) — STIG XCCDF namespace-agnostic parsing.
+    "lxml>=4.8",
+]
+
+# nsca_engine (Backend Track A) is a workspace-local dependency, not a
+# published package. Declaring it here documents the real dependency graph
+# and lets pip skip re-resolving it once it's already installed — but pip
+# still cannot fetch it from an index, so install order matters:
+#   pip install -e ../engine
+#   pip install -e .[dev]
+# This monorepo has no workspace tool yet (no uv/hatch workspace, no
+# pip --find-links pointed at ../engine); the two-step install above is the
+# real setup procedure until one is added.
+
+[project.optional-dependencies]
+dev = [
+    "pytest>=8.0",
+    "httpx>=0.27",
+    # M5 (00-master-plan.md §7's `Lint/type` gate: "ruff, mypy --strict on
+    # engine/ and platform/nsca_platform/{services,learning}") — same tool
+    # versions as engine/pyproject.toml's own dev extras, so both packages'
+    # CI jobs behave identically.
+    "ruff>=0.6",
+    "mypy>=1.10",
+    "types-PyYAML",
+]
+
+[build-system]
+requires = ["setuptools>=68", "wheel"]
+build-backend = "setuptools.build_meta"
+
+[tool.setuptools.packages.find]
+where = ["."]
+include = ["nsca_platform*"]
+
+[tool.pytest.ini_options]
+testpaths = ["nsca_platform/tests"]
+
+[tool.ruff]
+line-length = 100
+target-version = "py312"
+exclude = [".venv", ".pytest_cache"]
+
+[tool.ruff.lint]
+# Same rule set as engine/pyproject.toml, same rationale: sane non-heroic
+# default (pyflakes, pycodestyle, isort, bugbear, no-bare-except /
+# comprehension simplification), not the full "ALL" ruleset.
+select = ["E", "F", "W", "I", "B", "C4", "UP"]
+ignore = [
+    "E501",  # line length is handled by the formatter/line-length setting, not a hard error here
+]
+
+[tool.ruff.lint.per-file-ignores]
+"nsca_platform/tests/*" = ["B011"]
+# FastAPI's `Depends(...)`-as-a-default-argument is the framework's own
+# idiom (the call is intercepted at request time, never actually invoked as
+# a plain default) — bugbear's B008 doesn't know that, so every API router
+# in this codebase trips it by design, not by accident.
+"nsca_platform/api/*" = ["B008"]
+# Pre-existing debt (M3, learning/grammar_inference.py, not touched by M5):
+# ~20 single-letter `l` variables for "line". Purely a style/readability
+# rule (E741), zero functional risk — flagged here rather than silently
+# renamed across a whole file this milestone didn't otherwise touch, or
+# silently left to fail the new CI gate this milestone adds.
+"nsca_platform/learning/grammar_inference.py" = ["E741"]
+
+[tool.mypy]
+python_version = "3.12"
+# 00-master-plan.md §7's gate scopes `mypy --strict` to `engine/` and
+# `platform/nsca_platform/{services,learning}` specifically — not the whole
+# platform package (api/, db/, reporting/, remediation/, knowledge_import/
+# etc. were built across M0-M4 without a strict-mypy gate in place and are
+# not brought into scope retroactively this milestone; `packages` below
+# reflects that documented boundary rather than silently widening or
+# narrowing it).
+strict = true
+packages = ["nsca_platform.services", "nsca_platform.learning"]
+# Type-check imports (db/, reporting/, knowledge_import/, etc. — all
+# outside the gate's scope, per the comment above) for inference purposes
+# only, without surfacing --strict violations that live in files outside
+# `packages`. Those modules have their own real, pre-existing type gaps
+# (untyped python-docx/weasyprint call sites, etc.) that are unrelated to
+# this milestone's real-engine-wiring work and not brought into the gate's
+# scope by it.
+follow_imports = "silent"
+
+[[tool.mypy.overrides]]
+# nsca_engine's own component/result types are re-exported through
+# nsca_engine.api (the only module this package may import, per the
+# import-boundary rule) but nsca_engine itself is not type-checked as part
+# of *this* package's strict gate — it has its own, in engine/pyproject.toml.
+module = "nsca_engine.*"
+ignore_missing_imports = true

@@ -1,0 +1,120 @@
+# NSCA native control pack, M2 addition (06-controls-and-frameworks.md §3).
+#
+# backend-01 M2 scope: "a thin extractor + minimal rulepack YAML (3-5
+# extractors is enough, not a full 20-control library)... doesn't need to be
+# rich, just prove the pipe doesn't break for non-Cisco platforms." This pack
+# adds 2-3 platform-specific controls per new M2 platform (12 controls total)
+# on top of the existing `nsca_native` pack's "*" (all-platform) controls,
+# several of which (NSCA-MGMT-001/002/003, ssh/telnet/http/https) already
+# become meaningfully evaluable on the new platforms because their
+# extractors emit the *same* fact paths Cisco IOS uses
+# (`mgmt.protocols.*.enabled`) — a deliberate consistency choice, not an
+# accident, so the shared SBM schema actually gets exercised across
+# paradigms rather than only ever by Cisco.
+control_pack_id: nsca_native_m2
+version: "0.1.0"
+
+controls:
+  - control_id: NSCA-JSET-001
+    title: Juniper (set-format) SSH root login must be denied
+    family: authentication
+    severity_base: high
+    applies_to: { platform_family: [juniper_junos_set] }
+    requires_facts: [auth.root_login_denied]
+    assert: 'auth.root_login_denied == true'
+
+  - control_id: NSCA-JSET-002
+    title: Juniper (set-format) SSH must require protocol version 2
+    family: management_plane
+    severity_base: high
+    applies_to: { platform_family: [juniper_junos_set] }
+    requires_facts: [crypto.ssh.protocol_version]
+    assert: 'crypto.ssh.protocol_version == "v2"'
+
+  - control_id: NSCA-JBRACE-001
+    title: Juniper (curly-format) SSH root login must be denied
+    family: authentication
+    severity_base: high
+    applies_to: { platform_family: [juniper_junos_curly] }
+    requires_facts: [auth.root_login_denied]
+    assert: 'auth.root_login_denied == true'
+
+  - control_id: NSCA-JBRACE-002
+    title: Juniper (curly-format) SSH must require protocol version 2
+    family: management_plane
+    severity_base: high
+    applies_to: { platform_family: [juniper_junos_curly] }
+    requires_facts: [crypto.ssh.protocol_version]
+    assert: 'crypto.ssh.protocol_version == "v2"'
+
+  - control_id: NSCA-FTNT-001
+    title: FortiOS telnet management access must be disabled
+    family: management_plane
+    severity_base: high
+    applies_to: { platform_family: [fortios] }
+    requires_facts: [mgmt.protocols.telnet.enabled]
+    assert: 'mgmt.protocols.telnet.enabled == false'
+
+  - control_id: NSCA-FTNT-002
+    title: FortiOS remote syslog logging must be enabled
+    family: logging_audit
+    severity_base: medium
+    applies_to: { platform_family: [fortios] }
+    requires_facts: [logging.remote_enabled]
+    assert: 'logging.remote_enabled == true'
+
+  - control_id: NSCA-FTNT-003
+    title: FortiOS firewall default policy action must be an explicit accept or deny
+    family: filtering
+    severity_base: low
+    applies_to: { platform_family: [fortios] }
+    requires_facts: [filter.default_policy]
+    assert: 'filter.default_policy == "accept" or filter.default_policy == "deny"'
+
+  - control_id: NSCA-PANOS-002
+    title: PAN-OS SSH management session limit must be bounded
+    family: management_plane
+    severity_base: medium
+    applies_to: { platform_family: [panos] }
+    requires_facts: [mgmt.ssh.session_limit]
+    assert: 'mgmt.ssh.session_limit > 0 and mgmt.ssh.session_limit <= 50'
+
+  - control_id: NSCA-PANOS-003
+    title: PAN-OS remote syslog logging must be configured
+    family: logging_audit
+    severity_base: medium
+    applies_to: { platform_family: [panos] }
+    requires_facts: [logging.remote_servers]
+    assert: 'logging.remote_servers | any(s => true)'
+
+  - control_id: NSCA-ROS-001
+    title: RouterOS telnet management access must be disabled
+    family: management_plane
+    severity_base: high
+    applies_to: { platform_family: [routeros] }
+    requires_facts: [mgmt.protocols.telnet.enabled]
+    assert: 'mgmt.protocols.telnet.enabled == false'
+
+  - control_id: NSCA-ROS-002
+    title: RouterOS NTP client must be enabled
+    family: time_sync
+    severity_base: low
+    applies_to: { platform_family: [routeros] }
+    requires_facts: [time.ntp.enabled]
+    assert: 'time.ntp.enabled == true'
+
+  - control_id: NSCA-CLOUD-001
+    title: Cloud firewall must not define an unrestricted allow-all rule
+    family: filtering
+    severity_base: critical
+    applies_to: { platform_family: [cloud_generic_fw] }
+    requires_facts: [filter.rules]
+    assert: 'filter.rules | none(r => r.name == "allow-all")'
+
+  - control_id: NSCA-CLOUD-002
+    title: Cloud firewall management HTTPS must be enabled
+    family: management_plane
+    severity_base: high
+    applies_to: { platform_family: [cloud_generic_fw] }
+    requires_facts: [mgmt.protocols.https.enabled]
+    assert: 'mgmt.protocols.https.enabled == true'

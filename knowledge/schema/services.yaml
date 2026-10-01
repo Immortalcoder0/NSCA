@@ -1,0 +1,60 @@
+domain: services
+description: >
+  The extensible capability surface (05-security-baseline-model.md §4.10).
+  What allows the model to represent capabilities nobody has thought of
+  yet — a proprietary management protocol, a container runtime, a
+  programmable data plane. Registered here with its universal security
+  properties (§6) even before any control assesses it.
+schema_version: "0.1.0"
+fact_definitions:
+  - path: services.<name>.enabled
+    type: boolean
+    category: capability_surface
+    description: "Whether the named capability is enabled. Open registry — <name> is any registered service identifier."
+    closed: false
+    status: ratified
+
+  - path: services.<name>.port
+    type: integer
+    category: capability_surface
+    description: "Listening port for the named capability, if any."
+    closed: false
+    status: ratified
+
+  - path: services.<name>.properties
+    type: object
+    category: capability_surface
+    description: >
+      The universal security property set (05-security-baseline-model.md
+      §6): listens, authenticates, executes, mutates, transports,
+      persists, observable, default_on.
+    closed: false
+    status: ratified
+
+  - path: services.<name>.classification
+    type: enum
+    category: capability_surface
+    description: "known_category, novel_instance, unclassified."
+    closed: true
+    values: ["known_category", "novel_instance", "unclassified"]
+    status: ratified
+
+  - path: services.<name>.assessed_by
+    type: "list<ref>"
+    category: capability_surface
+    description: >
+      Which controls, if any, evaluate this capability. An empty list
+      marks the capability as unaudited surface (§4.10) and contaminates
+      the scope of related passing controls (TRD-03.3 §3.8).
+    closed: false
+    status: ratified
+
+  # Worked example from 05-security-baseline-model.md §6.1: a white-box
+  # switch's container runtime, registered with zero benchmark coverage.
+  - path: services.container_runtime.enabled
+    type: boolean
+    category: capability_surface
+    description: "Whether an on-box container runtime is present and enabled."
+    properties: { listens: true, executes: true, mutates: true, transports: true, default_on: true }
+    introduced_by_platform: whitebox_generic
+    status: provisional

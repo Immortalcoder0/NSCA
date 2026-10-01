@@ -1,0 +1,81 @@
+# Cloud-hosted virtual firewall/router (structured JSON export) rulepack —
+# M2 scope (backend-01 M2: cloud JSON paradigm, TRD-02.1 §3.3 P7).
+#
+# Judgment call (flagged): "cloud JSON" is not one shape across AWS/Azure/GCP
+# — see parse/paradigms/cloud_json.py's module docstring for the full
+# reasoning. `platform: cloud_generic_fw` names a representative shape
+# (device object: hostname / management block / ordered rule list) rather
+# than any one vendor's literal export format.
+platform: cloud_generic_fw
+vendor: generic_cloud
+version: "0.1.0"
+trust_tier: local
+
+fingerprint:
+  signatures:
+    - { type: line_regex, pattern: '"management":\s*\{',   weight: 0.30 }
+    - { type: line_regex, pattern: '"rules":\s*\[',         weight: 0.30 }
+    - { type: line_regex, pattern: '"hostname":',            weight: 0.20 }
+    - { type: line_regex, pattern: '"action":\s*"(allow|deny)"', weight: 0.20 }
+    - { type: negative, pattern: '^set system ',            weight: -0.60 }
+    - { type: negative, pattern: '^config system ',          weight: -0.60 }
+    - { type: negative, pattern: '^line vty ',                weight: -0.60 }
+    - { type: negative, pattern: '<config>',                  weight: -0.60 }
+
+grammar:
+  paradigm: cloud_json
+
+extractors:
+  - extractor_id: cloud_fw.device.hostname
+    version: 1
+    scope: { kind: any }
+    match: '^"hostname":\s*"(?P<name>[^"]+)",?$'
+    emit:
+      - fact: device.hostname
+        value: "name"
+
+  - extractor_id: cloud_fw.mgmt.ssh_enabled
+    version: 1
+    scope: { kind: any }
+    match: '^"ssh_enabled":\s*(?P<val>true|false),?$'
+    emit:
+      - fact: mgmt.protocols.ssh.enabled
+        value: "val == 'true'"
+
+  - extractor_id: cloud_fw.mgmt.https_enabled
+    version: 1
+    scope: { kind: any }
+    match: '^"https_enabled":\s*(?P<val>true|false),?$'
+    emit:
+      - fact: mgmt.protocols.https.enabled
+        value: "val == 'true'"
+
+  - extractor_id: cloud_fw.logging.remote_enabled
+    version: 1
+    scope: { kind: any }
+    match: '^"remote_enabled":\s*(?P<val>true|false),?$'
+    emit:
+      - fact: logging.remote_enabled
+        value: "val == 'true'"
+
+  - extractor_id: cloud_fw.filter.rule_name
+    version: 1
+    scope: { kind: any }
+    match: '^"name":\s*"(?P<name>[^"]+)",?$'
+    collection: filter.rules
+    element_fields:
+      name: "name"
+
+defaults:
+  mgmt.protocols.telnet.enabled:
+    - version_range: "*"
+      value: false
+      source: >
+        Cloud virtual-firewall reference configuration — Telnet management
+        is not exposed by cloud-hosted virtual appliances.
+  mgmt.protocols.http.enabled:
+    - version_range: "*"
+      value: false
+      source: >
+        Cloud virtual-firewall reference configuration — the management
+        plane is HTTPS-only by default.

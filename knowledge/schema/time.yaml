@@ -1,0 +1,44 @@
+domain: time
+description: >
+  Time synchronisation (05-security-baseline-model.md §4.6). Small but
+  disproportionately important: log timestamps are worthless without
+  trustworthy time, making this a prerequisite for the logging family.
+schema_version: "0.1.0"
+fact_definitions:
+  - path: time.ntp.enabled
+    type: boolean
+    category: time_sync
+    description: "Whether NTP synchronisation is enabled."
+    properties: { transports: true }
+    status: ratified
+
+  - path: time.ntp.servers
+    type: "list<object>"
+    category: time_sync
+    description: "{host, authenticated, preferred}."
+    status: ratified
+
+  - path: time.ntp.authentication_configured
+    type: boolean
+    category: time_sync
+    description: "Whether NTP authentication is configured."
+    status: ratified
+
+  - path: time.ntp.server_count
+    type: integer
+    category: time_sync
+    description: "Number of configured NTP servers."
+    status: ratified
+
+  - path: time.timezone
+    type: string
+    category: time_sync
+    description: "Configured device timezone."
+    status: ratified
+
+  - path: time.clock_source
+    type: enum
+    category: time_sync
+    description: "Source the device clock is derived from."
+    closed: false
+    status: ratified

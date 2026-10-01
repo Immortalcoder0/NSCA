@@ -1,0 +1,69 @@
+# PAN-OS rulepack — M2 scope (backend-01 M2: XML paradigm, TRD-02.1 §3.3 P5).
+# Parsed via parse/paradigms/xml.py, which uses lxml (TECH-STACK.md §6) —
+# never xmltodict — specifically so evidence binding (G3) has real line
+# numbers on this platform.
+platform: panos
+vendor: paloalto
+version: "0.1.0"
+trust_tier: local
+
+fingerprint:
+  signatures:
+    - { type: line_exact, value: "<config>",              weight: 0.30 }
+    - { type: line_regex, pattern: '<mgt-config>',         weight: 0.35 }
+    - { type: line_regex, pattern: '<log-settings>',       weight: 0.25 }
+    - { type: line_regex, pattern: '<hostname>',           weight: 0.10 }
+    - { type: negative, pattern: '^set system ',           weight: -0.60 }
+    - { type: negative, pattern: '^config system ',        weight: -0.60 }
+    - { type: negative, pattern: '^line vty ',              weight: -0.60 }
+    - { type: negative, pattern: '^/ip ',                   weight: -0.60 }
+
+grammar:
+  paradigm: xml
+
+extractors:
+  - extractor_id: panos.device.hostname
+    version: 1
+    scope: { kind: any }
+    match: '^<hostname>(?P<name>[^<]+)</hostname>$'
+    emit:
+      - fact: device.hostname
+        value: "name"
+
+  - extractor_id: panos.mgmt.telnet_enabled
+    version: 1
+    scope: { kind: any }
+    match: '^<telnet enabled="(?P<val>yes|no)"/>$'
+    emit:
+      - fact: mgmt.protocols.telnet.enabled
+        value: "val == 'yes'"
+
+  - extractor_id: panos.mgmt.https_enabled
+    version: 1
+    scope: { kind: any }
+    match: '^<https enabled="(?P<val>yes|no)"/>$'
+    emit:
+      - fact: mgmt.protocols.https.enabled
+        value: "val == 'yes'"
+
+  - extractor_id: panos.mgmt.ssh_session_limit
+    version: 1
+    scope: { kind: any }
+    match: '^<session-limit>(?P<n>\d+)</session-limit>$'
+    emit:
+      - fact: mgmt.ssh.session_limit
+        value: "int(n)"
+
+  - extractor_id: panos.logging.syslog_server
+    version: 1
+    scope: { kind: any }
+    match: '^<server>(?P<host>[^<]+)</server>$'
+    collection: logging.remote_servers
+    element_fields:
+      host: "host"
+
+defaults:
+  mgmt.protocols.telnet.enabled:
+    - version_range: "*"
+      value: false
+      source: "PAN-OS Administrator's Guide — the Telnet management service is disabled by default."

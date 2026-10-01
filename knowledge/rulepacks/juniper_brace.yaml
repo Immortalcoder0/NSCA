@@ -1,0 +1,74 @@
+# Juniper Junos (curly-brace format) rulepack — M2 scope (backend-01 M2:
+# brace paradigm, TRD-02.1 §3.3 P3). Same vendor as juniper_set.yaml but a
+# structurally distinct export form (Junos supports both); modelled as a
+# separate platform id so fingerprinting and grammar dispatch route
+# correctly (a config is in exactly one form at a time, never both).
+platform: juniper_junos_curly
+vendor: juniper
+version: "0.1.0"
+trust_tier: local
+
+fingerprint:
+  signatures:
+    - { type: block_regex, pattern: '^system \{$',              weight: 0.35 }
+    - { type: line_regex,  pattern: '^\s*\S[\w-]* \{$',          weight: 0.20 }
+    - { type: line_regex,  pattern: '\S;\s*$',                   weight: 0.20 }
+    - { type: comment_char, value: "#",                          weight: 0.10 }
+    - { type: line_regex,  pattern: '^\s*ssh \{$',                weight: 0.15 }
+    - { type: negative, pattern: '^set system ',                 weight: -0.60 }
+    - { type: negative, pattern: '^config system ',               weight: -0.60 }
+    - { type: negative, pattern: '^line vty ',                    weight: -0.60 }
+    - { type: negative, pattern: '^/ip ',                         weight: -0.60 }
+
+grammar:
+  paradigm: brace
+  comment_char: "#"
+
+extractors:
+  - extractor_id: juniper_brace.device.hostname
+    version: 1
+    scope: { kind: any }
+    match: '^host-name (?P<name>\S+);$'
+    emit:
+      - fact: device.hostname
+        value: "name"
+
+  - extractor_id: juniper_brace.mgmt.ssh_enabled
+    version: 1
+    scope: { kind: any }
+    match: '^ssh \{'
+    emit:
+      - fact: mgmt.protocols.ssh.enabled
+        value: "true"
+
+  - extractor_id: juniper_brace.crypto.ssh_protocol_version
+    version: 1
+    scope: { kind: any }
+    match: '^protocol-version (?P<v>\S+);$'
+    emit:
+      - fact: crypto.ssh.protocol_version
+        value: "v"
+
+  - extractor_id: juniper_brace.auth.root_login_denied
+    version: 1
+    scope: { kind: any }
+    match: '^root-login (?P<val>deny|allow);$'
+    emit:
+      - fact: auth.root_login_denied
+        value: "val == 'deny'"
+
+  - extractor_id: juniper_brace.time.ntp_server
+    version: 1
+    scope: { kind: any }
+    match: '^server (?P<host>\S+);$'
+    collection: time.ntp.servers
+    element_fields:
+      host: "host"
+
+defaults:
+  mgmt.protocols.telnet.enabled:
+    - version_range: "*"
+      value: false
+      source: >
+        Juniper Junos default configuration guide — the telnet service is
+        not enabled by default.

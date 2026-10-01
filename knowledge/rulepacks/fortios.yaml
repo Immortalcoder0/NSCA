@@ -1,0 +1,81 @@
+# FortiOS rulepack — M2 scope (backend-01 M2: block-keyword paradigm,
+# TRD-02.1 §3.3 P4).
+platform: fortios
+vendor: fortinet
+version: "0.1.0"
+trust_tier: local
+
+fingerprint:
+  signatures:
+    - { type: line_regex, pattern: '^config system global$',   weight: 0.30 }
+    - { type: line_regex, pattern: '^config firewall policy$', weight: 0.20 }
+    - { type: line_regex, pattern: '^\s*edit \S+',              weight: 0.15 }
+    - { type: line_exact, value: "next",                        weight: 0.10 }
+    - { type: line_exact, value: "end",                         weight: 0.10 }
+    - { type: comment_char, value: "#",                         weight: 0.15 }
+    - { type: negative, pattern: '^set system ',                weight: -0.60 }
+    - { type: negative, pattern: '\{\s*$',                      weight: -0.60 }
+    - { type: negative, pattern: '^line vty ',                  weight: -0.60 }
+    - { type: negative, pattern: '^/ip ',                       weight: -0.60 }
+
+grammar:
+  paradigm: block_keyword
+  comment_char: "#"
+
+extractors:
+  - extractor_id: fortios.mgmt.telnet_enabled
+    version: 1
+    scope: { kind: any }
+    match: '^set admin-telnet (?P<val>enable|disable)$'
+    emit:
+      - fact: mgmt.protocols.telnet.enabled
+        value: "val == 'enable'"
+
+  - extractor_id: fortios.mgmt.https_redirect_enforced
+    version: 1
+    scope: { kind: any }
+    match: '^set admin-https-redirect (?P<val>enable|disable)$'
+    emit:
+      # `admin-https-redirect` only controls whether HTTP admin requests are
+      # redirected to HTTPS — it says nothing about whether the HTTPS
+      # listener itself is enabled (that's a separate `allowaccess https`
+      # setting this rulepack does not yet extract). Do not map this to
+      # mgmt.protocols.https.enabled — that produced a false PASS risk on
+      # NSCA-MGMT-003 for any FortiOS device with HTTP admin actually
+      # enabled. Corrected to its own honestly-scoped fact.
+      - fact: mgmt.protocols.https.redirect_enforced
+        value: "val == 'enable'"
+
+  - extractor_id: fortios.logging.remote_status
+    version: 1
+    scope: { kind: any }
+    match: '^set status (?P<val>enable|disable)$'
+    emit:
+      - fact: logging.remote_enabled
+        value: "val == 'enable'"
+
+  - extractor_id: fortios.logging.syslog_server
+    version: 1
+    scope: { kind: any }
+    match: '^set server "(?P<host>[^"]+)"$'
+    collection: logging.remote_servers
+    element_fields:
+      host: "host"
+
+  - extractor_id: fortios.filter.default_action
+    version: 1
+    scope: { kind: any }
+    match: '^set action (?P<act>accept|deny)$'
+    emit:
+      - fact: filter.default_policy
+        value: "act"
+
+defaults:
+  mgmt.protocols.telnet.enabled:
+    - version_range: "*"
+      value: false
+      source: "FortiOS Administration Guide — admin-telnet is disabled by default."
+  mgmt.protocols.http.enabled:
+    - version_range: "*"
+      value: false
+      source: "FortiOS Administration Guide — the HTTP admin service defaults to disabled in favour of HTTPS."

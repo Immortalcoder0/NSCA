@@ -1,0 +1,79 @@
+domain: device
+description: >
+  Identity and physical characteristics. Populated primarily from
+  `show version` / `show inventory` artifacts, not from the running
+  configuration (05-security-baseline-model.md §4.1).
+schema_version: "0.1.0"
+fact_definitions:
+  - path: device.hostname
+    type: string
+    category: identity
+    description: "Configured device hostname."
+    status: ratified
+
+  - path: device.vendor
+    type: enum
+    category: identity
+    description: "Device vendor, as resolved by fingerprinting."
+    status: ratified
+
+  - path: device.platform
+    type: enum
+    category: identity
+    description: >
+      Platform identifier, e.g. cisco_ios, cisco_iosxe, cisco_nxos,
+      juniper_junos, fortios, panos, arista_eos, mikrotik_routeros,
+      sonic, aws_sg.
+    closed: false
+    status: ratified
+
+  - path: device.os_version
+    type: version
+    category: identity
+    description: "Normalised, comparable OS/firmware version."
+    status: ratified
+
+  - path: device.model
+    type: string
+    category: identity
+    description: "Hardware model identifier."
+    status: ratified
+
+  - path: device.serials
+    type: "list<object>"
+    category: identity
+    description: "Chassis, line card and power supply serials: {component, serial}."
+    status: ratified
+
+  - path: device.role
+    type: enum
+    category: identity
+    description: "core, distribution, access, edge, firewall, management, lab."
+    closed: true
+    values: ["core", "distribution", "access", "edge", "firewall", "management", "lab"]
+    status: ratified
+
+  - path: device.exposure
+    type: enum
+    category: identity
+    description: >
+      internet_facing, dmz, internal, isolated — computed from the graph,
+      not read from configuration. Never emitted by an extractor directly.
+    closed: true
+    values: ["internet_facing", "dmz", "internal", "isolated"]
+    properties: { listens: false, mutates: false, observable: false }
+    status: ratified
+
+  - path: device.uptime_sec
+    type: integer
+    category: identity
+    description: "Device uptime, in seconds."
+    status: ratified
+
+  - path: device.config_export_mode
+    type: enum
+    category: identity
+    description: "verbose, terse, unknown — drives the completeness warning."
+    closed: true
+    values: ["verbose", "terse", "unknown"]
+    status: ratified

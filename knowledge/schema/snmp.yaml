@@ -1,0 +1,46 @@
+domain: snmp
+description: >
+  Network management protocol (05-security-baseline-model.md §4.7).
+schema_version: "0.1.0"
+fact_definitions:
+  - path: snmp.enabled
+    type: boolean
+    category: management_plane
+    description: "Whether SNMP is enabled."
+    properties: { listens: true, authenticates: true, mutates: true, default_on: true }
+    status: ratified
+
+  - path: snmp.versions
+    type: enum
+    category: management_plane
+    description: "Enabled SNMP protocol versions."
+    closed: true
+    values: ["v1", "v2c", "v3"]
+    status: ratified
+
+  - path: snmp.communities
+    type: "list<object>"
+    category: management_plane
+    description: "{name, access, acl_applied, is_default}."
+    status: ratified
+
+  - path: snmp.v3_users
+    type: "list<object>"
+    category: management_plane
+    description: "{name, auth_protocol, priv_protocol, security_level}."
+    properties: { authenticates: true }
+    status: ratified
+
+  - path: snmp.traps_enabled
+    type: boolean
+    category: management_plane
+    description: "Whether SNMP traps are enabled."
+    properties: { observable: true, transports: true }
+    status: ratified
+
+  - path: snmp.write_access_present
+    type: boolean
+    category: management_plane
+    description: "Derived — whether any community/user has write access."
+    properties: { mutates: true }
+    status: ratified

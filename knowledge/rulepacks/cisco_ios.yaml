@@ -1,0 +1,188 @@
+# Cisco IOS rulepack (07-vendor-rulepacks.md §2) — M1 scope.
+#
+# Trust tier "local": taught for this milestone, not yet corpus-ratified
+# (07-vendor-rulepacks.md §8) — reported as such wherever this rulepack's
+# output is used, per that document's "a finding derived from provisional
+# parsing is not evidence" principle. M1 is one step more mature than
+# "provisional": it has unit + worked-example verification, but not the
+# corpus/metamorphic/cross-platform validation gates §9.1 requires before a
+# "certified" tier would be honest.
+platform: cisco_ios
+vendor: cisco
+version: "0.1.0"
+trust_tier: local
+
+fingerprint:
+  # M2 addition (backward compatible): a named `v` group lets api.py extract
+  # os_version generically across every platform, not via a Cisco-specific
+  # hardcoded regex (backend-01 M1 had this inline; M2 generalises it).
+  version_pattern: '^version (?P<v>\d+\.\d+)$'
+  signatures:
+    - { type: line_regex,  pattern: '^version \d+\.\d+$',                    weight: 0.35 }
+    - { type: line_exact,  value: "service password-encryption",             weight: 0.10 }
+    - { type: comment_char, value: "!",                                      weight: 0.10 }
+    - { type: block_regex, pattern: '^line vty \d+ \d+$',                    weight: 0.25 }
+    - { type: line_regex,  pattern: '^snmp-server community \S+',            weight: 0.10 }
+    - { type: line_regex,  pattern: '^username \S+ privilege \d+',           weight: 0.10 }
+    - { type: negative,    pattern: '^set system ',                          weight: -0.50 }
+    - { type: negative,    pattern: '^config system global$',                weight: -0.50 }
+
+grammar:
+  paradigm: indentation
+  comment_char: "!"
+  context_blocks:
+    - { pattern: '^line vty (?P<lo>\d+) (?P<hi>\d+)$', context: vty_range }
+    - { pattern: '^interface (?P<name>\S+)$',          context: interface }
+
+# extractor value expressions use the restricted value language
+# (extract/value_lang.py, TRD-03.1 §3.3) — no arbitrary code execution.
+extractors:
+  - extractor_id: cisco_ios.username
+    version: 4
+    scope: { kind: any }
+    match: '^username (?P<name>\S+)(?: privilege (?P<priv>\d+))? (?:secret|password) (?P<ptype>\d+) (?P<secret>\S+)$'
+    collection: auth.local_users
+    element_fields:
+      name: "name"
+      privilege_level: "int(priv)"
+      storage_type: "map_lookup('cisco_pw_types', ptype)"
+
+  - extractor_id: cisco_ios.vty.transport_input
+    version: 7
+    scope: { kind: vty, attribute: transport_input }
+    match: '^transport input (?P<protos>.+)$'
+    emit:
+      - fact: mgmt.protocols.telnet.enabled
+        value: "'telnet' in split(protos) or 'all' in split(protos)"
+      - fact: mgmt.protocols.ssh.enabled
+        value: "'ssh' in split(protos) or 'all' in split(protos)"
+
+  - extractor_id: cisco_ios.vty.exec_timeout
+    version: 3
+    scope: { kind: vty, attribute: exec_timeout }
+    match: '^exec-timeout (?P<m>\d+) (?P<s>\d+)$'
+    emit:
+      - fact: mgmt.session.idle_timeout_sec
+        value: "to_seconds(m, 'minutes') + to_seconds(s, 'seconds')"
+
+  - extractor_id: cisco_ios.snmp.community
+    version: 2
+    scope: { kind: any }
+    match: '^snmp-server community (?P<name>\S+) (?:RO|RW)(?:\s+\S+)?$'
+    collection: snmp.communities
+    element_fields:
+      name: "name"
+
+  - extractor_id: cisco_ios.mgmt.http_enabled
+    version: 1
+    scope: { kind: any }
+    match: '^ip http server$'
+    emit:
+      - fact: mgmt.protocols.http.enabled
+        value: "true"
+
+  - extractor_id: cisco_ios.mgmt.http_disabled
+    version: 1
+    scope: { kind: any }
+    match: '^no ip http server$'
+    emit:
+      - fact: mgmt.protocols.http.enabled
+        value: "false"
+
+  - extractor_id: cisco_ios.mgmt.https_enabled
+    version: 1
+    scope: { kind: any }
+    match: '^ip http secure-server$'
+    emit:
+      - fact: mgmt.protocols.https.enabled
+        value: "true"
+
+  - extractor_id: cisco_ios.mgmt.ssh_version
+    version: 2
+    scope: { kind: any }
+    match: '^ip ssh version (?P<v>\d+)$'
+    emit:
+      - fact: mgmt.ssh.version
+        value: "int(v)"
+
+  - extractor_id: cisco_ios.auth.central
+    version: 3
+    scope: { kind: any }
+    match: '^aaa authentication login \S+ group (?P<proto>\S+)(?: local)?$'
+    emit:
+      - fact: auth.central.configured
+        value: "true"
+
+  - extractor_id: cisco_ios.logging.host
+    version: 2
+    scope: { kind: any }
+    match: '^logging host (?P<host>\S+)$'
+    collection: logging.remote_servers
+    element_fields:
+      host: "host"
+
+  - extractor_id: cisco_ios.logging.timestamps
+    version: 1
+    scope: { kind: any }
+    match: '^service timestamps log datetime.*$'
+    emit:
+      - fact: logging.timestamps_enabled
+        value: "true"
+
+  - extractor_id: cisco_ios.time.ntp_server
+    version: 2
+    scope: { kind: any }
+    match: '^ntp server (?P<host>\S+)$'
+    collection: time.ntp.servers
+    element_fields:
+      host: "host"
+
+  - extractor_id: cisco_ios.time.ntp_enabled
+    version: 2
+    scope: { kind: any }
+    match: '^ntp server (?P<host>\S+)$'
+    emit:
+      - fact: time.ntp.enabled
+        value: "true"
+
+lookup_tables:
+  cisco_pw_types:
+    "0": plaintext
+    "7": reversible
+    "5": md5
+    "8": pbkdf2_sha256
+    "9": scrypt
+
+# 07-vendor-rulepacks.md §6 — every default cites its source (INV-03.2-02).
+defaults:
+  mgmt.source_restriction.configured:
+    - version_range: "*"
+      value: false
+      source: >
+        Cisco IOS Configuration Guide — no VTY access-class (source
+        restriction) is applied by default.
+
+  mgmt.banner.login_present:
+    - version_range: "*"
+      value: false
+      source: >
+        Cisco IOS Configuration Guide — no login banner is configured by
+        default.
+
+  mgmt.protocols.http.enabled:
+    - version_range: "<15.0"
+      value: true
+      source: "CIS Cisco IOS Benchmark v4.1.0, Default Value"
+    - version_range: ">=15.0"
+      value: false
+      source: "CIS Cisco IOS Benchmark v4.1.0, Default Value"
+
+  mgmt.session.idle_timeout_sec:
+    - version_range: "*"
+      value: 600
+      source: "Cisco IOS Configuration Guide 15.2"
+
+  # crypto.ssh.ciphers is deliberately absent from this table — no verified
+  # default exists yet for this rulepack's tier (05-security-baseline-
+  # model.md §9's worked example: this is exactly the fact that must resolve
+  # default_unknown).

@@ -1,0 +1,90 @@
+[build-system]
+requires = ["hatchling"]
+build-backend = "hatchling.build"
+
+[project]
+name = "nsca_engine"
+version = "0.0.1"
+description = "NSCA Assessment Engine — deterministic, model-free, offline pipeline (Backend Track A)."
+requires-python = ">=3.11"
+license = { text = "Proprietary" }
+
+# No runtime dependency here performs network I/O except what collection/
+# needs later (Netmiko/Paramiko, added when that module is built). Schema
+# and knowledge-base loading is local disk I/O only, performed once at
+# KnowledgeBase/SchemaRegistry construction time — never inside assess_*.
+dependencies = [
+    "lark>=1.1",
+    "pyyaml>=6.0",
+    "jsonschema>=4.20",
+    "lxml>=5.0",
+]
+
+[project.optional-dependencies]
+dev = [
+    "pytest>=8.0",
+    "hypothesis>=6.100",
+    "mypy>=1.10",
+    "ruff>=0.6",
+    "types-jsonschema",
+    "types-PyYAML",
+    # Deliberately NOT lxml-stubs: as of the versions available at M5 time,
+    # its `_Element.sourceline` stub resolves to `types.EllipsisType`
+    # (confirmed with `reveal_type` — a stub bug, not a real API), which is
+    # actively worse than no stub at all for a property this codebase's
+    # evidence binding (G3) leans on heavily. `[[tool.mypy.overrides]]`
+    # below treats `lxml.*` as untyped instead.
+]
+
+[tool.hatch.build.targets.wheel]
+packages = ["nsca_engine"]
+
+[tool.pytest.ini_options]
+testpaths = ["nsca_engine/tests"]
+# `perf` = expensive performance benchmarks (test_performance.py's
+# NFR-PERF-001 500-device multiprocessing run and NFR-PERF-003's
+# 500,000-line parse) — real tests, deselected by default so the everyday
+# `pytest` run (and the M5 10x-repeat determinism/flake check) stays fast.
+# Run them explicitly with `pytest -m perf`.
+markers = ["perf: expensive performance benchmarks, not run by default"]
+addopts = "-m 'not perf'"
+
+[tool.ruff]
+line-length = 100
+target-version = "py312"
+exclude = [".venv", ".hypothesis", ".pytest_cache"]
+
+[tool.ruff.lint]
+# Sane, non-heroic default set for M5: pyflakes, pycodestyle, isort,
+# bugbear, and the "no bare except" / comprehension-simplification rules.
+# Deliberately not turning on the full "ALL" ruleset — that would require a
+# repo-wide restyle pass this milestone doesn't budget for (see M5 report).
+select = ["E", "F", "W", "I", "B", "C4", "UP"]
+ignore = [
+    "E501",  # line length is handled by the formatter/line-length setting, not a hard error here
+]
+
+[tool.ruff.lint.per-file-ignores]
+"nsca_engine/tests/*" = ["B011"]
+
+[tool.mypy]
+python_version = "3.12"
+strict = true
+packages = ["nsca_engine"]
+exclude = "^nsca_engine/tests/"
+# Rulepack/ControlPack.loaded is deliberately `Any` (api.py's own docstring:
+# "Kept as `Any` rather than importing the concrete type here, so api.py ...
+# does not pull in the entire M1 engine internals import graph"). mypy
+# --strict on api.py callers of `.loaded` therefore legitimately sees `Any`
+# propagate — this is a documented, deliberate design choice, not a laziness
+# gap, so it is not suppressed further here.
+
+[[tool.mypy.overrides]]
+module = "nsca_engine.tests.*"
+ignore_errors = true
+
+[[tool.mypy.overrides]]
+# See the dev-dependency comment above `lxml-stubs` for why this is treated
+# as untyped rather than stubbed.
+module = "lxml.*"
+ignore_missing_imports = true

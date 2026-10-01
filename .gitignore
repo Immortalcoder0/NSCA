@@ -1,0 +1,44 @@
+# ---------------------------------------------------------------------------
+# Root ignore rules for the NSCA monorepo (engine/ + platform/ + frontend/).
+# Each subproject also carries its own .gitignore for path-local rules
+# (platform/.gitignore); this file covers the shared build/test/tool noise.
+# ---------------------------------------------------------------------------
+
+# Python virtualenvs
+.venv/
+venv/
+env/
+
+# Python bytecode / packaging / caches
+__pycache__/
+*.py[cod]
+*.egg-info/
+.eggs/
+build/
+.pytest_cache/
+.mypy_cache/
+.ruff_cache/
+.hypothesis/
+.coverage
+htmlcov/
+
+# Node / frontend
+node_modules/
+frontend/dist/
+*.tsbuildinfo
+npm-debug.log*
+yarn-error.log*
+pnpm-debug.log*
+
+# Generated demo/assessment artifacts
+platform/artifacts/
+
+# Freebuff workspace metadata
+.freebuff/
+
+# Editor / OS noise
+.DS_Store
+Thumbs.db
+.idea/
+.vscode/
+*.log

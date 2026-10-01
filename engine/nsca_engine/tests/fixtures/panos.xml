@@ -1,0 +1,15 @@
+<config>
+  <hostname>panos-fw-01</hostname>
+  <mgt-config>
+    <ssh>
+      <session-limit>10</session-limit>
+    </ssh>
+    <telnet enabled="no"/>
+    <https enabled="yes"/>
+  </mgt-config>
+  <log-settings>
+    <syslog>
+      <server>10.0.0.60</server>
+    </syslog>
+  </log-settings>
+</config>

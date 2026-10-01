@@ -1,0 +1,76 @@
+# Juniper Junos (set-format) rulepack — M2 scope (backend-01 M2: flat-path
+# paradigm). Trust tier "local": M2 is one step more mature than
+# "provisional" (unit + fixture verification) but has not been through the
+# corpus/metamorphic/cross-platform validation gates 07-vendor-rulepacks.md
+# §9.1 requires before "certified" — same honesty stance M1's cisco_ios.yaml
+# takes.
+platform: juniper_junos_set
+vendor: juniper
+version: "0.1.0"
+trust_tier: local
+
+fingerprint:
+  signatures:
+    - { type: line_regex, pattern: '^set system ',                 weight: 0.40 }
+    - { type: line_regex, pattern: '^set interfaces ',              weight: 0.15 }
+    - { type: line_regex, pattern: '^set system services ssh ',     weight: 0.15 }
+    - { type: line_regex, pattern: '^delete ',                      weight: 0.10 }
+    - { type: comment_char, value: "#",                             weight: 0.10 }
+    - { type: line_regex, pattern: '^set firewall ',                weight: 0.10 }
+    - { type: negative, pattern: '\{\s*$',                          weight: -0.60 }
+    - { type: negative, pattern: '^config system ',                 weight: -0.60 }
+    - { type: negative, pattern: '^line vty ',                      weight: -0.60 }
+    - { type: negative, pattern: '^/ip ',                           weight: -0.60 }
+
+grammar:
+  paradigm: flat_path
+  comment_char: "#"
+
+extractors:
+  - extractor_id: juniper_set.mgmt.ssh_enabled
+    version: 1
+    scope: { kind: any }
+    match: '^set system services ssh$'
+    emit:
+      - fact: mgmt.protocols.ssh.enabled
+        value: "true"
+
+  - extractor_id: juniper_set.mgmt.telnet_enabled
+    version: 1
+    scope: { kind: any }
+    match: '^set system services telnet$'
+    emit:
+      - fact: mgmt.protocols.telnet.enabled
+        value: "true"
+
+  - extractor_id: juniper_set.auth.root_login_denied
+    version: 1
+    scope: { kind: any }
+    match: '^set system services ssh root-login (?P<val>deny|allow)$'
+    emit:
+      - fact: auth.root_login_denied
+        value: "val == 'deny'"
+
+  - extractor_id: juniper_set.crypto.ssh_protocol_version
+    version: 1
+    scope: { kind: any }
+    match: '^set system services ssh protocol-version (?P<v>\S+)$'
+    emit:
+      - fact: crypto.ssh.protocol_version
+        value: "v"
+
+  - extractor_id: juniper_set.time.ntp_server
+    version: 1
+    scope: { kind: any }
+    match: '^set system ntp server (?P<host>\S+)$'
+    collection: time.ntp.servers
+    element_fields:
+      host: "host"
+
+defaults:
+  mgmt.protocols.telnet.enabled:
+    - version_range: "*"
+      value: false
+      source: >
+        Juniper Junos default configuration guide — the telnet service is
+        not enabled by default.
